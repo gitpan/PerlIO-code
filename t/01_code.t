@@ -1,7 +1,7 @@
 #!perl
 use strict;
 use warnings;
-use Test::More 'no_plan';
+use Test::More tests => 23;
 
 use PerlIO::code;
 
@@ -41,6 +41,25 @@ ok close($fh), "close";
 
 is $o, "bar", "print (after closed)";
 
+# binmode
+
+ok open($fh, '<:utf8', sub{}), 'open';
+is_deeply [PerlIO::get_layers($fh)], ['Code', 'utf8'], 'with :utf8';
+binmode $fh;
+is_deeply [PerlIO::get_layers($fh)], ['Code'], 'without :utf8';
+ok close($fh), 'close';
+
+
+# extra
+
+sub foo{
+	"foo\n";
+}
+binmode *STDIN, ':Code(foo)';
+is scalar(<STDIN>), "foo\n";
+
+binmode *STDIN, ':pop';
+
 # errors
 
 ok open(my $c, '+<', \&notfound), 'open';
@@ -54,3 +73,9 @@ eval{
 };
 ok $@, 'undefined subroutine';
 
+ok !binmode(*STDIN, ':Code'), 'no args';
+
+eval{
+	binmode *STDIN, ':Code()';
+};
+ok $@, 'unable to create empty named subroutine';

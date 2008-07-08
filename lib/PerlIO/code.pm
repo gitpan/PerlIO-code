@@ -3,7 +3,7 @@ package PerlIO::code;
 use warnings;
 use strict;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
@@ -17,7 +17,7 @@ PerlIO::code - Makes a simple I/O filter
 
 =head1 VERSION
 
-This document describes PerlIO::code version 0.01
+This document describes PerlIO::code version 0.02
 
 =head1 SYNOPSIS
 
@@ -34,7 +34,7 @@ This document describes PerlIO::code version 0.01
 =head1 DESCRIPTION
 
 C<PerlIO::code> helps to make an I/O filter. It is easier than C<tie>, but
-provides very limited functions. All it can do is to C<readline> and C<print>.
+provides very limited functions. All it can do is to do C<readline> and C<print>.
 
 =head1 NOTES
 
@@ -51,7 +51,7 @@ C<PerlIO::code> is slower than the C<tie> interface.
 =item *
 
 C<< open my $in, '<', sub{ "foo" }; my $s = <$in>; >> makes an endless loop, because
-the internal C<readline> routine reads C<$in> on until reaching EOF.
+the internal C<readline> routine reads C<$in> on until reaching C<EOF>.
 
 =back
 

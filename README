@@ -1,9 +1,6 @@
 NAME
     PerlIO::code - Makes a simple I/O filter
 
-VERSION
-    This document describes PerlIO::code version 0.01
-
 SYNOPSIS
             use PerlIO::code; # need to say explicitly
 
