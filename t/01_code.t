@@ -15,31 +15,44 @@ sub output{
 	($o) = @_;
 }
 
+sub inout{
+	($o) = @_;
+	return shift @data;
+}
+
 my $fh;
-ok open($fh, "<", \&input), "open for reading";
+ok open($fh, '<', \&input), 'open for reading';
 
-is scalar(<$fh>), "foo\n", "readline:0";
-is scalar(<$fh>), "bar\n", "readline:1";
-is scalar(<$fh>), "baz",   "readline:2";
-ok !defined(<$fh>),        "readline:undef";
-ok !defined(<$fh>),        "readline:undef (again)";
-ok eof($fh), "eof";
+is scalar(<$fh>), "foo\n", 'readline:0';
+is scalar(<$fh>), "bar\n", 'readline:1';
+is scalar(<$fh>), 'baz',   'readline:2';
+ok !defined(<$fh>),        'readline:undef';
+ok !defined(<$fh>),        'readline:undef (again)';
+ok eof($fh), 'eof';
 
-ok close($fh), "close";
+ok close($fh), 'close';
 
-ok open($fh, ">", \&output), "open for writing";
+ok open($fh, '>', \&output), 'open for writing';
 
 print $fh "foo\n";
 
-is $o, "foo\n", "print";
+is $o, "foo\n", 'print';
 
-print $fh "bar";
+print $fh 'bar';
 
-is $o, "bar", "print";
+is $o, 'bar', 'print';
 
-ok close($fh), "close";
+ok close($fh), 'close';
 
-is $o, "bar", "print (after closed)";
+is $o, 'bar', 'print (after closed)';
+
+#ok open($fh, '+<', \&inout), 'open for reading/writing';
+#@data = ("foo\n");
+#print $fh "bar\n";
+#
+#is $o, "bar\n", 'print';
+#is_deeply [<$fh>], ["foo\n"], 'readline';
+#ok close($fh), 'close';
 
 # binmode
 

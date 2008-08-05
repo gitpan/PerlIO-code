@@ -2,15 +2,10 @@ use 5.008_001;
 
 use strict;
 use warnings;
-use ExtUtils::MakeMaker;
+use inc::Module::Install;
 
-WriteMakefile(
-    NAME                => 'PerlIO::code',
-    AUTHOR              => 'Goro Fuji',
-    VERSION_FROM        => 'lib/PerlIO/code.pm',
-    ABSTRACT_FROM       => 'lib/PerlIO/code.pm',
+name 'PerlIO-code';
 
-    LICENSE             => 'perl',
+all_from 'lib/PerlIO/code.pm';
 
-    clean               => { FILES => 'PerlIO-code-*' },
-);
+WriteAll;

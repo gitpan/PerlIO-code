@@ -1,6 +1,7 @@
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
+
 #include "perliol.h"
 
 #include "ppport.h"
@@ -19,6 +20,8 @@
 typedef struct{
 	struct _PerlIO base;
 	CV* cv;
+	SV* arg;
+
 
 	SV* buf;
 	Off_t offset;
@@ -35,7 +38,14 @@ PerlIOCode_open(pTHX_ PerlIO_funcs *tab,
 	PERL_UNUSED_ARG(fd);
 	PERL_UNUSED_ARG(imode);
 	PERL_UNUSED_ARG(perm);
-	PERL_UNUSED_ARG(narg);
+
+	/* 0 < narg < 3 */
+	assert(narg > 0);
+	if(narg > 2){
+		/* too many arguments */
+		SETERRNO(EINVAL, LIB_INVARG);
+		return NULL;
+	}
 
 	if(f){
 		PerlIO_close(f);
@@ -46,6 +56,10 @@ PerlIOCode_open(pTHX_ PerlIO_funcs *tab,
 
 	if ( (f = PerlIO_push(aTHX_ f, tab, mode, args[0])) ) {
 		PerlIOBase(f)->flags |= PERLIO_F_OPEN;
+
+		if(narg == 2){
+			IOC(f)->arg = SvREFCNT_inc_simple_NN(args[1]);
+		}
 	}
 	return f;
 }
@@ -59,7 +73,13 @@ PerlIOCode_pushed(pTHX_ PerlIO * f, const char *mode, SV * arg, PerlIO_funcs * t
 		GV* gv;
 		ioc->cv = sv_2cv(arg, &stash, &gv, TRUE);
 
-		assert(ioc->cv != NULL);
+		assert(ioc != NULL);
+/*
+		if(ioc->cv == NULL){
+			SETERRNO(ENOENT,RMS_FNF);
+			return NULL;
+		}
+*/
 		SvREFCNT_inc_simple_void_NN(ioc->cv);
 	}
 	else{
@@ -76,26 +96,30 @@ PerlIOCode_pushed(pTHX_ PerlIO * f, const char *mode, SV * arg, PerlIO_funcs * t
 static IV
 PerlIOCode_popped(pTHX_ PerlIO * f){
 	PerlIOCode *ioc = IOC(f);
-	if (ioc->cv) {
-		SvREFCNT_dec(ioc->cv);
-		ioc->cv = Nullcv;
-	}
-	if(ioc->buf){
-		SvREFCNT_dec(ioc->buf);
-		ioc->buf = Nullsv;
-	}
+
+	SvREFCNT_dec(ioc->cv);
+	ioc->cv = Nullcv;
+
+	SvREFCNT_dec(ioc->buf);
+	ioc->buf = Nullsv;
+
+	SvREFCNT_dec(ioc->arg);
+	ioc->arg = Nullsv;
+
 	return PerlIOBase_popped(aTHX_ f);
 }
 
 
 static SSize_t
 PerlIOCode_write(pTHX_ PerlIO *f, const void *vbuf, Size_t count){
+	dVAR; dSP;
+
 	PerlIOCode* ioc = IOC(f);
-	dSP;
 
 	WRITING(f, -1);
 
 	PUSHMARK(SP);
+	if(ioc->arg) XPUSHs(ioc->arg);
 	sv_setpvn(ioc->buf, vbuf, count);
 	XPUSHs(ioc->buf);
 	PUTBACK;
@@ -107,7 +131,7 @@ PerlIOCode_write(pTHX_ PerlIO *f, const void *vbuf, Size_t count){
 
 static IV
 PerlIOCode_fill(pTHX_ PerlIO* f){
-	dSP;
+	dVAR; dSP;
 	PerlIOCode* ioc = IOC(f);
 	SV* result;
 
@@ -121,14 +145,16 @@ PerlIOCode_fill(pTHX_ PerlIO* f){
 	SAVETMPS;
 
 	PUSHMARK(SP);
-
-	if(call_sv((SV*)ioc->cv, G_SCALAR) != 1){
-		Perl_croak(aTHX_ "the callback did not return a value");
+	if(ioc->arg){
+		XPUSHs(ioc->arg);
+		PUTBACK;
 	}
 
-	SPAGAIN;
+	call_sv((SV*)ioc->cv, G_SCALAR);
 
+	SPAGAIN;
 	result = POPs;
+	PUTBACK;
 
 	if(SvOK(result)){
 		sv_copypv(ioc->buf, result);
@@ -136,12 +162,11 @@ PerlIOCode_fill(pTHX_ PerlIO* f){
 	}
 	else{
 		PerlIOBase(f)->flags |= PERLIO_F_EOF;
+		PerlIOBase(f)->flags &= ~PERLIO_F_RDBUF;
 		sv_setpvn(ioc->buf, "", 0);
 	}
 
 	ioc->offset = 0;
-
-	PUTBACK;
 
 	FREETMPS;
 	LEAVE;
@@ -151,7 +176,7 @@ PerlIOCode_fill(pTHX_ PerlIO* f){
 
 static STDCHAR*
 PerlIOCode_get_base(pTHX_ PerlIO* f){
-	return (STDCHAR*)SvPV_nolen(IOC(f)->buf);
+	return (STDCHAR*)SvPVX(IOC(f)->buf);
 }
 
 static Size_t
@@ -161,7 +186,7 @@ PerlIOCode_bufsiz(pTHX_ PerlIO* f){
 
 static STDCHAR*
 PerlIOCode_get_ptr(pTHX_ PerlIO* f){
-	return (STDCHAR*)SvPV_nolen(IOC(f)->buf) + IOC(f)->offset;
+	return (STDCHAR*)SvPVX(IOC(f)->buf) + IOC(f)->offset;
 }
 
 static SSize_t
@@ -171,16 +196,16 @@ PerlIOCode_get_cnt(pTHX_ PerlIO* f){
 
 static void
 PerlIOCode_set_ptrcnt(pTHX_ PerlIO* f, STDCHAR* ptr, SSize_t cnt){
-	PERL_UNUSED_VAR(ptr);
+	PERL_UNUSED_ARG(ptr);
 
 	IOC(f)->offset = SvCUR(IOC(f)->buf) - cnt;
 }
 
-PerlIO_funcs PerlIO_code = {
+PERLIO_FUNCS_DECL(PerlIO_code) = {
 	sizeof(PerlIO_funcs),
 	"Code",
 	sizeof(PerlIOCode),
-	PERLIO_K_BUFFERED | PERLIO_K_RAW,
+	PERLIO_K_BUFFERED | PERLIO_K_RAW | PERLIO_K_MULTIARG,
 	PerlIOCode_pushed,
 	PerlIOCode_popped,
 	PerlIOCode_open,
